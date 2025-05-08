@@ -1,0 +1,122 @@
+﻿import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import pandas as pd
+import plotly.express as px
+
+
+# Load data
+data = pd.read_csv('https://cf-courses-data.s3.us.cloud-object-storage.appdomain.cloud/IBMDeveloperSkillsNetwork-DV0101EN-SkillsNetwork/Data%20Files/historical_automobile_sales.csv')
+
+
+# Dash app
+app = dash.Dash(__name__)
+
+
+year_list = sorted(data['Year'].unique())
+
+
+# Layout
+app.layout = html.Div([
+   html.H1("Automobile Sales Statistics Dashboard", style={'textAlign': 'center', 'color': '#503D36', 'font-size': 24}),
+  
+   html.Div([
+       html.Label("Select Statistics:"),
+       dcc.Dropdown(
+           id='dropdown-statistics',
+           options=[
+               {'label': 'Yearly Statistics', 'value': 'Yearly Statistics'},
+               {'label': 'Recession Period Statistics', 'value': 'Recession Period Statistics'}
+           ],
+           placeholder='Select a report type'
+       ),
+   ], style={'width': '48%', 'display': 'inline-block'}),
+
+
+   html.Div([
+       dcc.Dropdown(
+           id='select-year',
+           options=[{'label': i, 'value': i} for i in year_list],
+           placeholder='Select Year'
+       )
+   ], style={'width': '48%', 'display': 'inline-block'}),
+
+
+   html.Div(id='output-container', className='chart-grid', style={'display': 'flex', 'flexDirection': 'column'})
+])
+
+
+# Disable year dropdown if Recession is selected
+@app.callback(
+   Output('select-year', 'disabled'),
+   Input('dropdown-statistics', 'value')
+)
+def disable_year_dropdown(selected_stat):
+   return selected_stat == 'Recession Period Statistics'
+
+
+# Generate graphs
+@app.callback(
+   Output('output-container', 'children'),
+   [Input('dropdown-statistics', 'value'),
+    Input('select-year', 'value')]
+)
+def update_output(stat_type, input_year):
+   if stat_type == 'Recession Period Statistics':
+       df = data[data['Recession'] == 1]
+
+
+       charts = []
+
+
+       yearly_rec = df.groupby('Year')['Automobile_Sales'].mean().reset_index()
+       charts.append(dcc.Graph(figure=px.line(yearly_rec, x='Year', y='Automobile_Sales', title="Average Automobile Sales During Recession")))
+
+
+       avg_sales = df.groupby('Vehicle_Type')['Automobile_Sales'].mean().reset_index()
+       charts.append(dcc.Graph(figure=px.bar(avg_sales, x='Vehicle_Type', y='Automobile_Sales', title="Avg Vehicles Sold by Type")))
+
+
+       exp = df.groupby('Vehicle_Type')['Advertising_Expenditure'].sum().reset_index()
+       charts.append(dcc.Graph(figure=px.pie(exp, values='Advertising_Expenditure', names='Vehicle_Type', title="Ad Expenditure Share")))
+
+
+       unemp = df.groupby(['unemployment_rate', 'Vehicle_Type'])['Automobile_Sales'].mean().reset_index()
+       charts.append(dcc.Graph(figure=px.bar(unemp, x='unemployment_rate', y='Automobile_Sales', color='Vehicle_Type', title="Unemployment vs Sales")))
+
+
+       return charts
+
+
+   elif stat_type == 'Yearly Statistics' and input_year:
+       df = data[data['Year'] == input_year]
+
+
+       charts = []
+
+
+       yas = data.groupby('Year')['Automobile_Sales'].mean().reset_index()
+       charts.append(dcc.Graph(figure=px.line(yas, x='Year', y='Automobile_Sales', title="Yearly Auto Sales")))
+
+
+       mas = data.groupby('Month')['Automobile_Sales'].sum().reset_index()
+       charts.append(dcc.Graph(figure=px.line(mas, x='Month', y='Automobile_Sales', title="Monthly Auto Sales")))
+
+
+       avg = df.groupby('Vehicle_Type')['Automobile_Sales'].mean().reset_index()
+       charts.append(dcc.Graph(figure=px.bar(avg, x='Vehicle_Type', y='Automobile_Sales', title=f"Avg Sales by Vehicle Type ({input_year})")))
+
+
+       exp = df.groupby('Vehicle_Type')['Advertising_Expenditure'].sum().reset_index()
+       charts.append(dcc.Graph(figure=px.pie(exp, values='Advertising_Expenditure', names='Vehicle_Type', title="Ad Expenditure by Vehicle Type")))
+
+
+       return charts
+
+
+   return []
+
+
+# Run
+if __name__ == '__main__':
+   app.run(debug=True)
